@@ -1,8 +1,8 @@
-// Prepares bodies of HTTP requests with MIME multipart messages without
-// reading entire file contents to memory. Instead of writing files to
-// multipart Writer right away, it collects Readers for each part of the form
-// and lets them stream to the network once the request has been sent.
-// Avoids buffering of the request body simpler than with goroutines
+// Package composer prepares bodies of HTTP requests with MIME multipart
+// messages without reading entire file contents to memory. Instead of writing
+// files to multipart Writer right away, it collects Readers for each part
+// of the form and lets them stream to the network once the request has been
+// sent. Avoids buffering of the request body simpler than with goroutines
 // and pipes.
 //
 // Text fields and files can be appended by convenience methods:

@@ -14,8 +14,8 @@ Upload a file with comment:
 
 ```go
 import (
-	"net/http"
-	"github.com/prantlf/go-multipart-composer"
+  "net/http"
+  composer "github.com/prantlf/go-multipart-composer"
 )
 // compose a multipart form-data content
 comp := composer.NewComposer()

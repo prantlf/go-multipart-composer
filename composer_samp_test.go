@@ -2,13 +2,12 @@ package composer_test
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"os"
-	"regexp"
 	"strings"
 
 	composer "github.com/prantlf/go-multipart-composer"
+	"github.com/prantlf/go-multipart-composer/internal/demo"
 )
 
 func Example() {
@@ -43,7 +42,7 @@ func Example() {
 	defer reqBody.Close()
 
 	// Make a network request with the composed content type and request body.
-	printRequestWithLength(contentLength, contentType, reqBody)
+	demo.PrintRequestWithLength(contentLength, contentType, reqBody)
 	// Output:
 	// Content-Length: 383
 	// Content-Type: multipart/form-data; boundary=1879bcd06ac39a4d8fa5
@@ -118,7 +117,7 @@ func ExampleComposer_FormDataContentType() {
 	// Get the content type for the composed multipart message.
 	contentType := comp.FormDataContentType()
 
-	printContentType(contentType)
+	demo.PrintContentType(contentType)
 	// Output:
 	// Content-Type: multipart/form-data; boundary=1879bcd06ac39a4d8fa5
 }
@@ -129,7 +128,7 @@ func ExampleComposer_AddField() {
 	// Add a textual field.
 	comp.AddField("foo", "bar")
 
-	printRequestBody(comp.DetachReader())
+	demo.PrintRequestBody(comp.DetachReader())
 	// Output:
 	// --1879bcd06ac39a4d8fa5
 	// Content-Disposition: form-data; name="foo"
@@ -144,7 +143,7 @@ func ExampleComposer_AddFieldReader() {
 	// Add a textual field with a value supplied by a reader.
 	comp.AddFieldReader("foo", strings.NewReader("bar"))
 
-	printRequestBody(comp.DetachReader())
+	demo.PrintRequestBody(comp.DetachReader())
 	// Output:
 	// --1879bcd06ac39a4d8fa5
 	// Content-Disposition: form-data; name="foo"
@@ -161,7 +160,7 @@ func ExampleComposer_AddFile() {
 		log.Fatal(err)
 	}
 
-	printRequestBody(comp.DetachReader())
+	demo.PrintRequestBody(comp.DetachReader())
 	// Output:
 	// --1879bcd06ac39a4d8fa5
 	// Content-Disposition: form-data; name="file"; filename="test.txt"
@@ -181,7 +180,7 @@ func ExampleComposer_AddFileReader() {
 	}
 	comp.AddFileReader("file", "test.txt", file)
 
-	printRequestBody(comp.DetachReader())
+	demo.PrintRequestBody(comp.DetachReader())
 	// Output:
 	// --1879bcd06ac39a4d8fa5
 	// Content-Disposition: form-data; name="file"; filename="test.txt"
@@ -197,7 +196,7 @@ func ExampleComposer_DetachReader() {
 	// Get a multipart message with no parts.
 	reqBody := comp.DetachReader()
 
-	printRequestBody(reqBody)
+	demo.PrintRequestBody(reqBody)
 	// Output:
 	// --1879bcd06ac39a4d8fa5--
 }
@@ -211,9 +210,9 @@ func ExampleComposer_DetachReaderWithSize() {
 		log.Fatal(err)
 	}
 
-	printContentLength(contentLength)
-	printContentType(comp.FormDataContentType())
-	printRequestBody(reqBody)
+	demo.PrintContentLength(contentLength)
+	demo.PrintContentType(comp.FormDataContentType())
+	demo.PrintRequestBody(reqBody)
 	// Output:
 	// Content-Length: 68
 	// Content-Type: multipart/form-data; boundary=1879bcd06ac39a4d8fa5
@@ -230,7 +229,7 @@ func ExampleComposer_Clear() {
 
 	comp.AddField("foo", "bar")
 
-	printRequestBody(comp.DetachReader())
+	demo.PrintRequestBody(comp.DetachReader())
 	// Output:
 	// --1879bcd06ac39a4d8fa5
 	// Content-Disposition: form-data; name="foo"
@@ -279,7 +278,7 @@ func ExampleComposer_Close() {
 		log.Fatal(err)
 	}
 
-	printRequest(comp.FormDataContentType(), reqBody)
+	demo.PrintRequest(comp.FormDataContentType(), reqBody)
 	// Output:
 	// Content-Type: multipart/form-data; boundary=1879bcd06ac39a4d8fa5
 	//
@@ -289,52 +288,4 @@ func ExampleComposer_Close() {
 	//
 	// text file content
 	// --1879bcd06ac39a4d8fa5--
-}
-
-const fixedBoundary = "3a494cd3b73de6555202"
-const commonBoundary = "1879bcd06ac39a4d8fa5"
-
-var contentTypeBoundary = regexp.MustCompile("boundary=.+")
-var requestBodyBoundary = regexp.MustCompile("--[0-9a-z]+")
-
-func printRequestWithLength(contentLength int64, contentType string, reqBody io.ReadCloser) {
-	printContentLength(contentLength)
-	printRequest(contentType, reqBody)
-}
-
-func printRequest(contentType string, reqBody io.ReadCloser) {
-	printContentType(contentType)
-	fmt.Println()
-	printRequestBody(reqBody)
-}
-
-func printContentType(contentType string) {
-	if contentType[len(contentType)-20:] != fixedBoundary {
-		contentType = contentTypeBoundary.ReplaceAllLiteralString(contentType, "boundary="+commonBoundary)
-	}
-	fmt.Printf("Content-Type: %s\n", contentType)
-}
-
-func printContentLength(contentLength int64) {
-	fmt.Printf("Content-Length: %d\n", contentLength)
-}
-
-func printRequestBody(reqBody io.ReadCloser) {
-	defer reqBody.Close()
-	reqBuf := stringifyReader(reqBody)
-	if err := reqBody.Close(); err != nil {
-		log.Fatal(err)
-	}
-	if reqBuf[len(reqBuf)-24:len(reqBuf)-4] != fixedBoundary {
-		reqBuf = requestBodyBoundary.ReplaceAllLiteralString(reqBuf, "--"+commonBoundary)
-	}
-	fmt.Println(reqBuf)
-}
-
-func stringifyReader(reqBody io.Reader) string {
-	builder := new(strings.Builder)
-	if _, err := io.Copy(builder, reqBody); err != nil {
-		log.Fatal(err)
-	}
-	return strings.ReplaceAll(builder.String(), "\r\n", "\n")
 }
