@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	composer "github.com/prantlf/go-multipart-composer"
-	"github.com/prantlf/go-multipart-composer/internal/demo"
+	"github.com/prantlf/go-multipart-composer/demo"
 )
 
 func Example() {
