@@ -86,7 +86,7 @@ func TestComposer_AddFile_missing(t *testing.T) {
 
 func TestComposer_AddFile_text(t *testing.T) {
 	comp := composer.NewComposer()
-	comp.AddFile("file", "test.txt")
+	comp.AddFile("file", "demo/test.txt")
 	out, _ := ioutil.ReadAll(comp.DetachReader())
 	if !strings.Contains(string(out), "Content-Type: text/plain") {
 		t.Error("composer: unrecognised text")
@@ -95,7 +95,7 @@ func TestComposer_AddFile_text(t *testing.T) {
 
 func TestComposer_AddFile_binary(t *testing.T) {
 	comp := composer.NewComposer()
-	comp.AddFile("file", "test.bin")
+	comp.AddFile("file", "demo/test.bin")
 	out, _ := ioutil.ReadAll(comp.DetachReader())
 	if !strings.Contains(string(out), "Content-Type: application/octet-stream") {
 		t.Error("composer: unrecognised binary")

@@ -22,7 +22,7 @@ func Example() {
 	// Add a textual field.
 	comp.AddField("comment", "a comment")
 	// Add a file content. Fails if the file cannot be opened.
-	if err := comp.AddFile("file", "test.txt"); err != nil {
+	if err := comp.AddFile("file", "demo/test.txt"); err != nil {
 		log.Fatal(err)
 	}
 
@@ -156,7 +156,7 @@ func ExampleComposer_AddFile() {
 	comp := composer.NewComposer()
 
 	// Add a file content. Fails if the file cannot be opened.
-	if err := comp.AddFile("file", "test.txt"); err != nil {
+	if err := comp.AddFile("file", "demo/test.txt"); err != nil {
 		log.Fatal(err)
 	}
 
@@ -174,7 +174,7 @@ func ExampleComposer_AddFileReader() {
 	comp := composer.NewComposer()
 
 	// Add a file content supplied as a separate reader.
-	file, err := os.Open("test.txt")
+	file, err := os.Open("demo/test.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func ExampleComposer_Close() {
 	comp := composer.NewComposer()
 
 	// Add a file reader which will be closed automatically.
-	file, err := os.Open("test.txt")
+	file, err := os.Open("demo/test.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -259,7 +259,7 @@ func ExampleComposer_Close() {
 	comp.CloseReaders = false
 
 	// Add a file reader which will not be closed automatically.
-	file, err = os.Open("test.txt")
+	file, err = os.Open("demo/test.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func ExampleComposer_Close() {
 	comp.AddFileReader("file", "test.txt", file)
 
 	// Adding a file by path is impossible if automatic closing is disabled.
-	if err := comp.AddFile("file", "test.txt"); err == nil {
+	if err := comp.AddFile("file", "demo/test.txt"); err == nil {
 		log.Fatal("added")
 	}
 
