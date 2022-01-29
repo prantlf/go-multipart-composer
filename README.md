@@ -1,5 +1,9 @@
 # go-multipart-composer
 
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/prantlf/go-multipart-composer)](https://pkg.go.dev/github.com/prantlf/go-multipart-composer)
+[![Test Status](https://github.com/prantlf/go-multipart-composer/workflows/Test/badge.svg)](https://github.com/prantlf/go-multipart-composer/actions)
+[![codecov](https://codecov.io/gh/prantlf/go-multipart-composer/branch/master/graph/badge.svg?token=XS0COPSRR7)](https://codecov.io/gh/prantlf/go-multipart-composer)
+
 Prepares bodies of HTTP requests with MIME multipart messages according to [RFC7578] without reading entire file contents to memory. Instead of writing files to a [multipart writer] right away, it collects [readers] for each part of the form and lets them stream to the network once the request has been sent. Avoids buffering of the request body simpler than with [goroutines] and [pipes]. See the [documentation] for more information.
 
 ## Installation
@@ -46,7 +50,7 @@ resp, err := http.DefaultClient.Do(request)
 
 See the [documentation] for the full interface.
 
-[documentation]: https://pkg.go.dev/github.com/prantlf/go-multipart-composer
+[documentation]: https://pkg.go.dev/github.com/prantlf/go-multipart-composer#section-documentation
 [readers]: https://golang.org/pkg/io/#Reader
 [multipart writer]: https://golang.org/pkg/mime/multipart/#Writer
 [goroutines]: https://tour.golang.org/concurrency/1
