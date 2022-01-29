@@ -20,12 +20,16 @@
 package composer
 
 import (
+	"bytes"
 	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
 	"mime"
+	"net/textproto"
+	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/prantlf/go-sizeio"
@@ -45,6 +49,10 @@ type Composer struct {
 
 // NewComposer returns a new multipart message Composer with a random
 // boundary.
+//
+// If you are going to add parts with readers that needs closing (files),
+// defer a call to Close in case an error occurs, the best right after
+// calling this method.
 func NewComposer() *Composer {
 	return &Composer{boundary: randomBoundary(), CloseReaders: true}
 }
@@ -57,9 +65,10 @@ func (c *Composer) Boundary() string {
 // SetBoundary overrides the Composer's initial boundary separator
 // with an explicit value.
 //
-// SetBoundary must be called before any parts are added, may only
+// SetBoundary must be called before any parts are added, or after all
+// parts were detached by one of the DetachReader methods. may only
 // contain certain ASCII characters, and must be non-empty and
-// at most 70 bytes long.
+// at most 70 bytes long. (See RFC 2046, section 5.1.1.)
 func (c *Composer) SetBoundary(boundary string) error {
 	if len(c.readers) > 0 {
 		return errors.New("multipart: SetBoundary called after add")
@@ -90,7 +99,8 @@ func (c *Composer) SetBoundary(boundary string) error {
 // ResetBoundary overrides the Composer's current boundary separator
 // with a randomly generared one.
 //
-// ResetBoundary must be called before any parts are added.
+// ResetBoundary must be called before any parts are added, or after all
+// parts were detached by one of the DetachReader methods.
 func (c *Composer) ResetBoundary() error {
 	if len(c.readers) > 0 {
 		return errors.New("multipart: RandomizeBoundary called after add")
@@ -99,8 +109,9 @@ func (c *Composer) ResetBoundary() error {
 	return nil
 }
 
-// FormDataContentType returns the Content-Type for an HTTP
-// multipart/form-data with this Composers's Boundary.
+// FormDataContentType returns the value of Content-Type for an HTTP request
+// with the body prepared by this Composer. It will include the constant
+// "multipart/form-data" and this Composers's Boundary.
 func (c *Composer) FormDataContentType() string {
 	boundary := c.boundary
 	// Quote the boundary if it contains any of the special characters
@@ -111,22 +122,94 @@ func (c *Composer) FormDataContentType() string {
 	return "multipart/form-data; boundary=" + boundary
 }
 
-// AddField is a convenience wrapper around AddFileReader. It creates
-// a new multipart section with the provided field name and value.
+// CreateFilePart creates a new general multipart section, but does not add
+// it to the composer yet.
+// Passing the returned header to AddPart will add it to the composer.
+func (c *Composer) CreatePart(disposition map[string]string) textproto.MIMEHeader {
+	head := make(textproto.MIMEHeader)
+	var buf bytes.Buffer
+	fmt.Fprint(&buf, "form-data")
+	for key, val := range disposition {
+		fmt.Fprintf(&buf, `; %s="%s"`, key, escapeQuotes(val))
+	}
+	head.Set("Content-Disposition", buf.String())
+	return head
+}
+
+// CreateFilePart creates a new multipart section for a field, but does not add
+// it to the composer yet.
+// Passing the returned header to AddPart will add it to the composer.
+func (c *Composer) CreateFieldPart(name string) textproto.MIMEHeader {
+	head := make(textproto.MIMEHeader)
+	head.Set("Content-Disposition", fmt.Sprintf(
+		"form-data; name=\"%s\"", escapeQuotes(name)))
+	return head
+}
+
+// CreateFilePart creates a new multipart section for a file, but does not add
+// it to the composer yet.
+// Passing the returned header to AddPart will add it to the composer.
+func (c *Composer) CreateFilePart(fieldName, fileName string) textproto.MIMEHeader {
+	head := make(textproto.MIMEHeader)
+	contentType := mime.TypeByExtension(filepath.Ext(fileName))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	head.Set("Content-Disposition", fmt.Sprintf(
+		"form-data; name=\"%s\"; filename=\"%s\"", escapeQuotes(fieldName), escapeQuotes(fileName)))
+	head.Set("Content-Type", contentType)
+	return head
+}
+
+// AddPart creates a new multipart section prepared earlier with CreatePart,
+// CreateFieldPart or CreateFilePart.
+// It inserts all headers prepared earlier and then appends the value reader.
+func (c *Composer) AddPart(header textproto.MIMEHeader, reader io.Reader) {
+	var buf bytes.Buffer
+	var delimiter string
+	if len(c.readers) > 0 {
+		delimiter = "\r\n"
+	}
+	fmt.Fprintf(&buf, "%s--%s\r\n", delimiter, c.boundary)
+	keys := make([]string, 0, len(header))
+	for key := range header {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		for _, val := range header[key] {
+			fmt.Fprintf(&buf, "%s: %s\r\n", key, val)
+		}
+	}
+	fmt.Fprintf(&buf, "\r\n")
+	c.readers = append(c.readers, bytes.NewReader(buf.Bytes()), reader)
+}
+
+// AddField creates a new multipart section with a field value.
+// It inserts a header with the provided field name and value.
 func (c *Composer) AddField(name, value string) {
-	c.AddFieldReader(name, strings.NewReader(value))
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%s--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s",
+		c.delimiter(), c.boundary, escapeQuotes(name), value)
+	c.readers = append(c.readers, bytes.NewReader(buf.Bytes()))
 }
 
 // AddFieldReader creates a new multipart section with a field value.
 // It inserts a header using the given field name and then appends
 // the value reader.
 func (c *Composer) AddFieldReader(name string, reader io.Reader) {
-	c.readers = append(c.readers,
-		strings.NewReader(fmt.Sprintf("%s\r\n\r\n", c.partPrefix(name))), reader)
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%s--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n",
+		c.delimiter(), c.boundary, escapeQuotes(name))
+	c.readers = append(c.readers, bytes.NewReader(buf.Bytes()), reader)
 }
 
-// AddFile is a convenience wrapper around AddFileReader. It creates a new
-// multipart section with the provided field name and file content.
+// AddFile is a convenience wrapper around AddFileReader. It opens the given
+// file and uses its name, stats and content to create the new part.
+//
+// The opened file wil be owned by the Composer. Do not forget to close
+// the composer, once you do not need it, or defer the closure to perform
+// it automatically in case of a failure.
 func (c *Composer) AddFile(fieldName, filePath string) error {
 	if !c.CloseReaders {
 		return errors.New("multipart: adding file by path forbidden")
@@ -139,17 +222,40 @@ func (c *Composer) AddFile(fieldName, filePath string) error {
 	return nil
 }
 
+// AddFileObject is a convenience wrapper around AddFileReader. It uses
+// the name, stats and content of the opened file to create the new part.
+//
+// The opened file wil be owned by the Composer. Do not forget to close
+// the composer, once you do not need it, or defer the closure to perform
+// it automatically in case of a failure. However, do not close the source
+// file. The reader taking part in the request body creation would fail.
+func (c *Composer) AddFileObject(fieldName string, file *os.File) error {
+	stat, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	c.AddFileReader(fieldName, stat.Name(), sizeio.SizeReadCloser(file, stat.Size()))
+	return nil
+}
+
 // AddFileReader creates a new multipart section with a file content.
 // It inserts a header using the given field name, file name and the content
-// type inferred from the file extension, then appends the file reader.
+// type inferred from the file extension, then appends the reader's content.
+//
+// If the reader passed in is a ReaderCloser, it will be owned and eventually
+// freed by the Composer. Do not forget to close the composer, once you do
+// not need it, or defer the closure to perform it automatically in case of
+// a failure. However, do not close the source file. The reader taking part
+// in the request body creation would fail.
 func (c *Composer) AddFileReader(fieldName, fileName string, reader io.Reader) {
 	contentType := mime.TypeByExtension(filepath.Ext(fileName))
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
-	c.readers = append(c.readers, strings.NewReader(
-		fmt.Sprintf("%s; filename=\"%s\"\r\nContent-Type: %s\r\n\r\n",
-			c.partPrefix(fieldName), escapeQuotes(fileName), contentType)), reader)
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%s--%s\r\nContent-Disposition: form-data; name=\"%s\"; filename=\"%s\"\r\nContent-Type: %s\r\n\r\n",
+		c.delimiter(), c.boundary, escapeQuotes(fieldName), escapeQuotes(fileName), contentType)
+	c.readers = append(c.readers, bytes.NewReader(buf.Bytes()), reader)
 }
 
 // DetachReader finishes the multipart message by adding the trailing
@@ -241,13 +347,11 @@ func (c *Composer) appendLastBoundary() {
 		strings.NewReader(fmt.Sprintf("\r\n--%s--\r\n", c.boundary)))
 }
 
-func (c *Composer) partPrefix(name string) string {
-	var delimiter string
+func (c *Composer) delimiter() string {
 	if len(c.readers) > 0 {
-		delimiter = "\r\n"
+		return "\r\n"
 	}
-	return fmt.Sprintf("%s--%s\r\nContent-Disposition: form-data; name=\"%s\"",
-		delimiter, c.boundary, escapeQuotes(name))
+	return ""
 }
 
 var quoteEscaper = strings.NewReplacer("\\", "\\\\", `"`, "\\\"")

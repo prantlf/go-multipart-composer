@@ -3,6 +3,7 @@ package composer_test
 import (
 	"io"
 	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 
@@ -102,6 +103,26 @@ func TestComposer_AddFile_binary(t *testing.T) {
 	}
 }
 
+func TestComposer_AddFileObject_opened(t *testing.T) {
+	comp := composer.NewComposer()
+	file, _ := os.Open("demo/test.bin")
+	defer file.Close()
+	comp.AddFileObject("file", file)
+	out, _ := ioutil.ReadAll(comp.DetachReader())
+	if !strings.Contains(string(out), "Content-Type: application/octet-stream") {
+		t.Error("composer: unrecognised file object")
+	}
+}
+
+func TestComposer_AddFileObject_closed(t *testing.T) {
+	comp := composer.NewComposer()
+	file, _ := os.Open("demo/test.bin")
+	file.Close()
+	if err := comp.AddFileObject("file", file); err == nil {
+		t.Error("composer: closed file object added")
+	}
+}
+
 func TestComposer_DetachReaderWithSize_nosize(t *testing.T) {
 	pipeReader, pipeWriter := io.Pipe()
 	go func() {
@@ -119,5 +140,80 @@ func TestComposer_DetachReaderWithSize_nosize(t *testing.T) {
 	}
 	if out != nil {
 		t.Error("composer: invalid reader not nil")
+	}
+}
+
+func TestComposer_AddField_plain(t *testing.T) {
+	comp := composer.NewComposer()
+	comp.AddField("name", "demo/test.bin")
+	out, _ := ioutil.ReadAll(comp.DetachReader())
+	if !strings.Contains(string(out), "demo/test.bin") {
+		t.Error("composer: missing field")
+	}
+}
+
+func TestComposer_AddField_escaped(t *testing.T) {
+	comp := composer.NewComposer()
+	comp.AddField("name \"a\"", "demo/test.bin")
+	out, _ := ioutil.ReadAll(comp.DetachReader())
+	if !strings.Contains(string(out), "name=\"name \\\"a\\\"") {
+		t.Error("composer: unescaped field")
+	}
+}
+
+func TestComposer_AddPart_file(t *testing.T) {
+	comp := composer.NewComposer()
+	part := comp.CreateFilePart("file", "my")
+	comp.AddPart(part, strings.NewReader("test"))
+	out, _ := ioutil.ReadAll(comp.DetachReader())
+	if !strings.Contains(string(out), "name=\"file\"") ||
+		!strings.Contains(string(out), "filename=\"my\"") ||
+		!strings.Contains(string(out), "test") {
+		t.Error("composer: part file not added")
+	}
+}
+
+func TestComposer_AddPart_field(t *testing.T) {
+	comp := composer.NewComposer()
+	part := comp.CreateFieldPart("field")
+	comp.AddPart(part, strings.NewReader("test"))
+	out, _ := ioutil.ReadAll(comp.DetachReader())
+	if !strings.Contains(string(out), "name=\"field\"") ||
+		!strings.Contains(string(out), "test") {
+		t.Error("composer: part field not added")
+	}
+}
+
+func TestComposer_AddPart_part(t *testing.T) {
+	comp := composer.NewComposer()
+	disp := make(map[string]string)
+	disp["name"] = "value"
+	part := comp.CreatePart(disp)
+	comp.AddPart(part, strings.NewReader("test"))
+	out, _ := ioutil.ReadAll(comp.DetachReader())
+	println(string(out))
+	if !strings.Contains(string(out), "name=\"value\"") ||
+		!strings.Contains(string(out), "test") {
+		t.Error("composer: part not added")
+	}
+}
+
+func TestComposer_AddPart_2parts(t *testing.T) {
+	comp := composer.NewComposer()
+	disp := make(map[string]string)
+	disp["name"] = "value1"
+	part := comp.CreatePart(disp)
+	comp.AddPart(part, strings.NewReader("test1"))
+	disp = make(map[string]string)
+	disp["name"] = "value2"
+	part = comp.CreatePart(disp)
+	comp.AddPart(part, strings.NewReader("test2"))
+	out, _ := ioutil.ReadAll(comp.DetachReader())
+	println(string(out))
+	if !strings.Contains(string(out), "name=\"value1\"") ||
+		!strings.Contains(string(out), "test1") ||
+		!strings.Contains(string(out), "name=\"value2\"") ||
+		!strings.Contains(string(out), "test2") {
+		t.Error("composer: 2 parts not added")
 	}
 }
