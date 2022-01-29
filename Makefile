@@ -9,14 +9,17 @@ build:
 	go build
 
 test:
-	go test -v
+	go test -race -v
 
 cover:
-	go test -coverprofile cover.txt
-	go tool cover -html=cover.txt -o cover.html
+	go test -coverprofile=coverage.txt -covermode=atomic
+	go tool cover -html=coverage.txt -o coverage.html
 
 clean:
 	go clean
-	rm -rf cover.*
+	rm -f coverage.*
+
+publish:
+	GOPROXY=proxy.golang.org go list -m 'github.com/prantlf/go-multipart-composer@v$(VERSION)'
 
 .PHONY: vet build test cover clean
